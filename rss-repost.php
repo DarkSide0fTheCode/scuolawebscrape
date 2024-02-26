@@ -193,7 +193,7 @@ function scrape_request($url, $parserId)
 
     $request_url = 'http://62.68.68.28:3000/extract?target=' . urlencode($url);
 
-    $response = wp_remote_get($request_url);
+    $response = wp_remote_get($request_url, array('timeout' => 60));
 
     // Check for errors
     if (is_wp_error($response)) {
@@ -209,35 +209,49 @@ function scrape_request($url, $parserId)
     // What type of variable is $response?
     echo_log("Type of response: " . gettype($response) . "\n");
     
+    // echo_log($response);
+
     $body = wp_remote_retrieve_body($response);
 
-    echo_log("Body retrieved! \n");
+    // echo_log($body);
+
+    $article_content = mb_convert_encoding($body, 'HTML-ENTITIES', 'UTF-8');
+
+    // echo_log($article_content);
+
+    $cleaned_content = remove_non_paragraph_elements($article_content);
+
+    echo_log($cleaned_content);
+
+    return $cleaned_content;
+    // echo_log("cleaned_content: \n" . $cleaned_content . "\n");
+    // return $cleaned_content;
 
     // The body should be a JSON string, so decode it into an array
-    echo_log("Preparing to retrieve data \n");
+    // echo_log("Preparing to retrieve data \n");
 
-    $data = json_decode($body, true);
+    // $data = json_decode($body, true);
 
-    echo_log("data retrieved! \n");
+    // echo_log("data retrieved! \n");
 
 
     // Check if the request was successful
-    if ($data['success']) {
-        // The article content should be in the 'data' field
-        $article_content = $data['data']['articleContent'];
-        echo_log("Type of article_content: " . gettype($article_content) . "\n");
-        echo_log("article_content: \n" . $article_content . "\n");
-        $article_content = mb_convert_encoding($article_content, 'HTML-ENTITIES', 'UTF-8');
-        $cleaned_content = remove_non_paragraph_elements($article_content);
+    // if ($data['success']) {
+    //     // The article content should be in the 'data' field
+    //     $article_content = $data['data']['articleContent'];
+    //     echo_log("Type of article_content: " . gettype($article_content) . "\n");
+    //     echo_log("article_content: \n" . $article_content . "\n");
+    //     $article_content = mb_convert_encoding($article_content, 'HTML-ENTITIES', 'UTF-8');
+    //     $cleaned_content = remove_non_paragraph_elements($article_content);
 
-        // echo_log("cleaned_content: \n" . $cleaned_content . "\n");
-        // Return the article content
-        return $cleaned_content;
-    } else {
-        // Handle the error
-        echo "Error: " . $data['error']['message'];
-        return;
-    }
+    //     // echo_log("cleaned_content: \n" . $cleaned_content . "\n");
+    //     // Return the article content
+    //     return $cleaned_content;
+    // } else {
+    //     // Handle the error
+    //     echo "Error: " . $data['error']['message'];
+    //     return;
+    // }
 }
 
 // Create a function to fetch and process RSS feed items
@@ -247,10 +261,11 @@ function fetch_rss_feed_and_post_to_blog()
     $rss_feed_urls = array(
         'https://www.orizzontescuola.it/feed/' => array(
             'image_title' => 'notizie-default',
-            'tags' => array('test-scuola', 'test-school'), // Add specific tags for this URL
+            // 'tags' => array('test-scuola', 'test-school'), // Add specific tags for this URL
             'category' => "Notizie",
             'parserId' => '.entry-content',
             'post_author' => 2, // Set the author
+            'label' => 'Orizzontescuola'
 
         ),
         // 'https://www.vivoscuola.it/itfeed/rss/tag/162' => array(
@@ -270,16 +285,20 @@ function fetch_rss_feed_and_post_to_blog()
         $post_tags = $data['tags'];
         $post_category = $data['category'];
         $post_author = $data['post_author'];
+        $label = $data['label'];
 
         // Fetch the RSS feed
 
+        echo_log("FETCHING RSS URL: " .$rss_feed_url);
         $rss = fetch_feed($rss_feed_url);
+
+		// echo_log($rss);
 
         if (!is_wp_error($rss)) {
             $website_link = $rss->get_base();
 
             // Get the RSS feed items
-            $max_items = $rss->get_item_quantity(10); // Change 10 to the number of items you want to fetch
+            $max_items = $rss->get_item_quantity(20); // Change 10 to the number of items you want to fetch
             $rss_items = $rss->get_items(0, $max_items);
 
 
@@ -288,6 +307,9 @@ function fetch_rss_feed_and_post_to_blog()
             foreach ($rss_items as $item) {
                 // Get the necessary data from the feed item
                 $post_title = $item->get_title();
+
+                echo_log("Fetching RSS feed with title: " .$post_title);
+
                 // $post_content = $item->get_content(); 
                 $post_date = $item->get_date('Y-m-d H:i:s');
                 $post_link = $item->get_permalink();
@@ -322,7 +344,8 @@ function fetch_rss_feed_and_post_to_blog()
 
                 $articleContent = scrape_request($post_link, $data['parserId']);
 
-                $articleContent .= '<p>Fonte: ' . $website_link . '</p';
+                // $articleContent .= '<p>Fonte: ' . $website_link . '</p>';
+                $articleContent .= '<p>Fonte: <a title="'. $label .'" href="'. $website_link . '" target="_blank">' . $label . '</a></p>';
 
                 // Create a new post
                 $new_post = array(
@@ -455,12 +478,27 @@ function fetch_rss_feed_and_post_to_blog()
 // Schedule the function to run at regular intervals
 function schedule_fetch_rss_feed()
 {
-    if (!wp_next_scheduled('fetch_rss_feed_event')) {
-        wp_schedule_event(time(), 'hourly', 'fetch_rss_feed_event');
+    if (!wp_next_scheduled('Scheduled_Scuolafetch')) {
+        wp_schedule_event(time(), 'hourly', 'Scheduled_Scuolafetch');
     }
 }
 add_action('wp', 'schedule_fetch_rss_feed');
-add_action('fetch_rss_feed_event', 'fetch_rss_feed_and_post_to_blog');
+add_action('Scheduled_Scuolafetch', 'fetch_rss_feed_and_post_to_blog');
 add_action('admin_menu', 'my_admin_menu');
 
-// $salve = "<div>\n<div></div>\n<header>\n<div>\n<span>\n<a href=\"https://www.orizzontescuola.it/ata/\">ATA</a> </span>\n<span>\n<a href=\"https://www.orizzontescuola.it/proroga-contratti-ata-5-739-collaboratori-scolastici-3-166-assistenti-tecnici-e-amministrativi-in-arrivo-le-istruzioni-del-ministero/\"><time>28 Dic 2023 - 15:01</time></a> </span>\n</div>\n<h1>Proroga contratti ATA: 5.739 collaboratori scolastici. 3.166 assistenti tecnici e amministrativi. In arrivo le istruzioni del Ministero</h1> <div>\nDi <span><a href=\"https://www.orizzontescuola.it/author/redazione/\">redazione</a></span> </div>\n</header>\n<div>\n\n<a href=\"https://facebook.com/sharer/sharer.php?u=https://www.orizzontescuola.it/proroga-contratti-ata-5-739-collaboratori-scolastici-3-166-assistenti-tecnici-e-amministrativi-in-arrivo-le-istruzioni-del-ministero/\" target=\"_blank\">\n<div><div>\n</div>Facebook</div>\n</a>\n\n<a href=\"https://twitter.com/intent/tweet/?text=Proroga contratti ATA: 5.739 collaboratori scolastici. 3.166 assistenti tecnici e amministrativi. In arrivo le istruzioni del Ministero&amp;url=https://www.orizzontescuola.it/proroga-contratti-ata-5-739-collaboratori-scolastici-3-166-assistenti-tecnici-e-amministrativi-in-arrivo-le-istruzioni-del-ministero/\" target=\"_blank\">\n<div><div>\n</div>Twitter</div>\n</a>\n\n<a target=\"_blank\">\n<div><div>\n</div>WhatsApp</div>\n</a>\n\n<a href=\"https://t.me/share/url?text=Proroga contratti ATA: 5.739 collaboratori scolastici. 3.166 assistenti tecnici e amministrativi. In arrivo le istruzioni del Ministero&amp;url=https://www.orizzontescuola.it/proroga-contratti-ata-5-739-collaboratori-scolastici-3-166-assistenti-tecnici-e-amministrativi-in-arrivo-le-istruzioni-del-ministero/\" target=\"_blank\">\n<div><div>\n</div>Telegram</div>\n</a>\n\n<a href=\"https://www.printfriendly.com\" target=\"_self\">\n<div><div>\n\n\n\n\n</div>Stampa</div>\n</a>\n\n</div>\n<div></div>\n<div></div>\n<div>\n </div>\n<div></div>\n<div></div>\n<p>Il Ministero ci ha informato che i contratti a tempo determinato per i collaboratori scolastici, per un totale di 5.739 (4320 da PNRR e 1419 da Agenda Sud), e i contratti per gli assistenti amministrativi e tecnici, per un totale di 3.166, saranno prorogati.</p>\n<div></div>\n<div></div>\n<p>Lo scrive la <strong>Uil Scuola Rua</strong>, che dunque comunica i piani in merito alla proroga dei contratti ATA.</p>\n<p>Capitolo <strong>collaboratori scolastici</strong>: per tale personale – scrive il sindacato – il canale di finanziamento è la legge di Bilancio che è ancora in corso di approvazione e che prevede la proroga dei contratti, senza soluzione di continuità, a partire dal 1° gennaio 2024 e sino al <strong>15 aprile 2024</strong> nonostante la funzione SIDI per la proroga dei contratti, sarà disponibile solo dall’8 gennaio 2024.</p>\n<p>Per quanto riguarda gli <strong>assistenti amministrativi e assistenti tecnici</strong>, il canale di finanziamento è il Decreto legge n. 145/2023 convertito in Legge n. 191/2023 con risorse non a carico dello Stato ma previste dal PNRR. In questo caso la norma prevede l’attivazione di nuovi incarichi di personale amministrativo e tecnico secondo il finanziamento stabilito, per cui al momento non c’è una data di scadenza precisa dei contratti come invece è prevista dalla Legge di Bilancio per i collaboratori scolastici. In base a quanto si apprende, in questo caso la proroga dovrebbe essere fino al <strong>30 giugno 2026.</strong></p>\n<p>In giornata, spiega la Uil Scuola Rua, il Ministero invierà alle scuole le istruzioni operative per la corretta stipula dei contratti e metterà a disposizione delle stesse un simulatore per la gestione delle risorse PNRR al fine di calibrare con esattezza la data di termine del contratto per gli assistenti amministrativi e tecnici.</p>\n<blockquote><p><a href=\"https://www.orizzontescuola.it/organico-aggiuntivo-ata-chi-riguarda-la-proroga-al-15-aprile-2024-in-legge-di-bilancio/\">Organico aggiuntivo ATA, chi riguarda la proroga al 15 aprile 2024 in legge di Bilancio?</a></p></blockquote>\n<p></p>\n<p></p>\n<div>\n<div></div>\n<div></div>\n<div>\n\n<a href=\"https://facebook.com/sharer/sharer.php?u=https://www.orizzontescuola.it/proroga-contratti-ata-5-739-collaboratori-scolastici-3-166-assistenti-tecnici-e-amministrativi-in-arrivo-le-istruzioni-del-ministero/\" target=\"_blank\">\n<div><div>\n</div>Facebook</div>\n</a>\n\n<a href=\"https://twitter.com/intent/tweet/?text=Proroga contratti ATA: 5.739 collaboratori scolastici. 3.166 assistenti tecnici e amministrativi. In arrivo le istruzioni del Ministero&amp;url=https://www.orizzontescuola.it/proroga-contratti-ata-5-739-collaboratori-scolastici-3-166-assistenti-tecnici-e-amministrativi-in-arrivo-le-istruzioni-del-ministero/\" target=\"_blank\">\n<div><div>\n</div>Twitter</div>\n</a>\n\n<a target=\"_blank\">\n<div><div>\n</div>WhatsApp</div>\n</a>\n\n<a href=\"https://t.me/share/url?text=Proroga contratti ATA: 5.739 collaboratori scolastici. 3.166 assistenti tecnici e amministrativi. In arrivo le istruzioni del Ministero&amp;url=https://www.orizzontescuola.it/proroga-contratti-ata-5-739-collaboratori-scolastici-3-166-assistenti-tecnici-e-amministrativi-in-arrivo-le-istruzioni-del-ministero/\" target=\"_blank\">\n<div><div>\n</div>Telegram</div>\n</a>\n\n<a href=\"https://www.printfriendly.com\" target=\"_self\">\n<div><div>\n\n\n\n\n</div>Stampa</div>\n</a>\n\n</div>\n<div>\n<h2>Corsi</h2>\n<article>\n<h2><a href=\"https://www.orizzontescuola.it/concorso-straordinario-docenti-6-nuove-lezioni-live-per-superare-la-prova-scritta-analizzeremo-ulteriori-400-quesiti-su-tutti-gli-argomenti-del-test-2-edizione/\">Concorso straordinario docenti, 6 nuove lezioni live per superare la prova scritta. Analizzeremo ulteriori 400 quesiti su tutti gli argomenti del test – 2° edizione</a></h2> </article>\n<article>\n<h2><a href=\"https://www.orizzontescuola.it/pnrr-3-1-steam-scuole-possono-presentare-progetti-innovativi-le-indicazioni-operative-sulle-procedure-amministrative-negoziali-e-contabili-in-un-webinar-giorno-8-gratuito-per-gli-abbonati-plus/\">PNRR 3.1 STEAM, scuole possono presentare progetti innovativi. Le indicazioni operative sulle procedure amministrative, negoziali e contabili in un WEBINAR giorno 8, gratuito per gli abbonati PLUS</a></h2> </article>\n<a href=\"https://www.orizzontescuolaformazione.it/\">Tutti i corsi</a>\n</div>\n<div>\n<h2>Orizzonte Scuola PLUS</h2>\n<article>\n<h2><a href=\"https://www.orizzontescuola.it/gestire-il-personale-scolastico-anno-3-n2-supplenze-personale-docente-tutto-quello-che-ce-da-sapere-con-casi-concreti-per-segreterie-e-docenti/\">Gestire il personale scolastico anno 3 n°2 – Supplenze personale docente: tutto quello che c’è da sapere con casi concreti per segreterie e docenti</a></h2> </article>\n<article>\n<h2><a href=\"https://www.orizzontescuola.it/la-dirigenza-scolastica-anno-3-n4-le-novita-dautunno-circolari-adempimenti-e-scadenze-autunnali-per-scuole-e-dirigenti-scolastici-abbonati-o-acquistala/\">La dirigenza scolastica. Anno 3 n°4 – Le novità d’autunno: circolari, adempimenti e scadenze autunnali per scuole e Dirigenti scolastici. Abbonati o acquistala</a></h2> </article>\n<a href=\"https://plus.orizzontescuola.it/\">Scopri tutti i contenuti PLUS</a>\n</div>\n<div>\n<a href=\"https://www.orizzontescuola.it/content/newsletter\">\n<span>Iscriviti alla newsletter di OrizzonteScuola</span>\n<p>Ricevi ogni sera nella tua casella di posta una e-mail con tutti gli aggiornamenti del network di\norizzontescuola.it</p>\n</a>\n</div>\n<footer>\n<div>\n<span>\nPubblicato in <a href=\"https://www.orizzontescuola.it/ata/\">ATA</a> </span>\n</div>\n</footer>\n<div>\n<div></div>\n<div></div>\n<div></div>\n<div></div>\n</div>\n<div></div>\n<div></div>\n<div></div>\n</div>\n</div>";
+function custom_plugin_feed_cache_lifetime( $seconds ) {
+    // Set the cache lifetime to 6 hours (in seconds) for your plugin
+    // return 21600; // 6 hours * 60 minutes * 60 seconds
+    return 0.1 * 60 * 60; // 6 hours * 60 minutes * 60 seconds
+
+}
+
+
+add_filter( 'wp_feed_cache_transient_lifetime', 'custom_plugin_feed_cache_lifetime' );
+
+
+// function turn_off_feed_caching( $feed ) {
+    // $feed->enable_cache( false );
+// }
+
+// add_action( 'wp_feed_options', 'turn_off_feed_caching' );
