@@ -27,8 +27,11 @@ const whitelist = [
   "127.0.0.1",
   "::ffff:127.0.0.1",
   "::ffff:172.17.0.1",
+  "::ffff:188.216.202.161",
   "82.55.177.110",
   "188.216.202.161",
+  "::ffff:34.147.93.183",
+  "::ffff:43.163.234.87"
 ]; // Replace with your whitelisted IPs
 
 // Serve static files from the public directory
@@ -120,7 +123,7 @@ const send = ({ url = "", proxy = {} }) => {
       var browser = puppeteerRealBrowser.browser;
       var page = puppeteerRealBrowser.page;
       try {
-        console.log("Navigating to url");
+        console.log("Navigating to url " + url);
         await page.goto(url, { waitUntil: "domcontentloaded" });
 
         console.log("Checking stat");
@@ -250,6 +253,7 @@ app.get("/extract", async (req, res) => {
       const sanitizedArticleContent = sanitizeHtml(firstArticleHTML);
 
       res.send(sanitizedArticleContent);
+      console.log("Article returned correctly")
 
     } catch (error) {
       console.log(`Failed to retrieve the first article: ${error}`);
@@ -270,75 +274,6 @@ app.get("/extract", async (req, res) => {
 
     await resp.data.browser.close();
   });
-
-  // const StealthPlugin = require("puppeteer-extra-plugin-stealth");
-  // puppeteer.use(StealthPlugin());
-
-  // try {
-  //   console.log("Launching Puppeteer browser...");
-  //   const browser = await puppeteer.launch({
-  //     headless: "new",
-  //     args: ['--no-sandbox', '--disable-setuid-sandbox']
-  //   });
-  //   console.log("New page created.");
-  //   const page = await browser.newPage();
-
-  //   await page.setExtraHTTPHeaders({
-  //     "Accept-Language": "en-US,en;q=0.9,ru;q=0.8",
-  //   });
-  //   await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.55 Safari/537.36 Edg/96.0.1054.34")
-  //   page.setViewport({ width: 1920, height: 1080});
-  //   await page.setJavaScriptEnabled(true);
-
-  //   console.log(`Navigating to ${url}`);
-  //   await page.goto(url, { waitUntil: "domcontentloaded" });
-
-  //   console.log("Waaaaait");
-  //   await page.waitForTimeout(10000);
-  //   console.log("Waaaaait Ended!");
-
-  //   let articleContent;
-  //   console.log("Bubududu");
-  //   console.log(page);
-
-  //   // Replace this with your specific logic to extract article content
-  //   console.log("Extracting article content...");
-  //   try {
-  //     articleContent = await page.$eval("article", (element) =>
-  //       element.innerHTML.trim()
-  //     );
-  //   } catch (error) {
-  //     console.log("Article element not found. Falling back to body element.");
-  //     articleContent = await page.$eval("body", (element) =>
-  //       element.innerHTML.trim()
-  //     );
-  //   }
-
-  //   // Sanitize the article content
-  //   console.log("Sanitizing article content...");
-  //   const sanitizedArticleContent = sanitizeHtml(articleContent);
-
-  //   await browser.close();
-
-  //   // Send the sanitized article content as the response
-  //   console.log("Sending extracted content in response.");
-  //   res.send(sanitizedArticleContent);
-  // } catch (error) {
-  //   // Log the error for debugging purposes
-  //   console.error(error);
-
-  //   // Send a more specific error message based on the error that occurred
-  //   if (error instanceof puppeteer.errors.TimeoutError) {
-  //     console.log("Timeout error while loading the page.");
-  //     res.status(500).send("Timeout error while loading the page");
-  //   } else if (error.message.includes("failed to find element")) {
-  //     console.log("Failed to find the article element on the page.");
-  //     res.status(404).send("Failed to find the article element on the page");
-  //   } else {
-  //     console.log("An unexpected error occurred.");
-  //     res.status(500).send("An unexpected error occurred");
-  //   }
-  // }
 });
 
 app.listen(PORT, () => {
